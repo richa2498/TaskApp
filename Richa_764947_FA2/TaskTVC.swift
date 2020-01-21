@@ -9,22 +9,90 @@
 import UIKit
 import CoreData
 
-class TaskTVC: UITableViewController {
+class TaskTVC: UITableViewController,UISearchBarDelegate {
     
+   
+    
+
+    
+     let appDelegate = UIApplication.shared.delegate as! AppDelegate
+   
+    @IBOutlet weak var searchBar: UISearchBar!
     var index : Int?
     var results : [NSManagedObject]?
+    var filterResult : [NSManagedObject]?
     var titleU : String = ""
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        loadCoreData()
+        
+
+        searchBar.delegate = self
+          definesPresentationContext = true
+//          tableView.tableHeaderView = searchController.searchBar
+//          searchController.searchBar.tintColor = UIColor.white
+   
+          loadCoreData()
         // Uncomment the following line to preserve selection between presentations
         // self.clearsSelectionOnViewWillAppear = false
 
         // Uncomment the following line to display an Edit button in the navigation bar for this view controller.
          self.navigationItem.rightBarButtonItem = self.editButtonItem
+       
     }
-
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+           print(searchText)
+           let contex = appDelegate.persistentContainer.viewContext
+                  
+           let getreq = NSFetchRequest<NSFetchRequestResult>(entityName: "Todolist")
+            do{
+               if !searchText.isEmpty{
+                   getreq.predicate = NSPredicate(format: "title contains %@", searchText)
+               }
+               if results is [NSManagedObject]{
+                      results = try contex.fetch(getreq) as! [NSManagedObject]
+                      tableView.reloadData()
+               }
+               
+               
+                  }catch{
+                      print(error)
+                  }
+               
+         
+       }
+    @IBAction func byDate(_ sender: UIButton) {
+        print("......")
+        let contex = appDelegate.persistentContainer.viewContext
+        
+        let getreq = NSFetchRequest<NSFetchRequestResult>(entityName: "Todolist")
+        
+        getreq.sortDescriptors = [NSSortDescriptor(key: "date", ascending: true)]
+        do{
+            results = try contex.fetch(getreq) as! [NSManagedObject]
+            tableView.reloadData()
+            
+        }catch{
+            print(error)
+        }
+    }
+    
+    @IBAction func byTitle(_ sender: UIButton) {
+        print("......")
+        let contex = appDelegate.persistentContainer.viewContext
+        
+        let getreq = NSFetchRequest<NSFetchRequestResult>(entityName: "Todolist")
+        
+        getreq.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
+        do{
+            results = try contex.fetch(getreq) as! [NSManagedObject]
+            tableView.reloadData()
+            
+        }catch{
+            print(error)
+        }
+        
+    }
     // MARK: - Table view data source
 
     override func numberOfSections(in tableView: UITableView) -> Int {
@@ -39,20 +107,34 @@ class TaskTVC: UITableViewController {
 
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "task") as! UITableViewCell
-        var task  = results![indexPath.row]
-        cell.textLabel?.text = task.value(forKey: "title") as! String
-       var days = task.value(forKey: "noOfDays") as! Int
-        cell.detailTextLabel!.text = "Days : \(days)"
         
+          var task  = results![indexPath.row]
         
+          let cell = tableView.dequeueReusableCell(withIdentifier: "task") as! UITableViewCell
+           let managedContext = appDelegate.persistentContainer.viewContext
+          cell.textLabel?.text = task.value(forKey: "title") as! String
         
+          var days = task.value(forKey: "noOfDays") as! Int
+        
+          cell.detailTextLabel!.text = "Days : \(days)"
+        
+          if (task.value(forKey: "noOfDays") as! Int) == 0 {
+            task.setValue(true, forKey: "isDone")
+            cell.backgroundColor = .cyan
+                    do{
+                          try managedContext.save()
+                       }catch{
+                            print(error)
+                        }
+                   return cell
+        }
+          cell.backgroundColor = .white
         return cell
     }
     func loadCoreData() {
       
         // create an instance of app delegate
-        let appDelegate = UIApplication.shared.delegate as! AppDelegate
+      //  let appDelegate = UIApplication.shared.delegate as! AppDelegate
         // second step is context
         let managedContext = appDelegate.persistentContainer.viewContext
 
@@ -68,7 +150,7 @@ class TaskTVC: UITableViewController {
                     let desc = result.value(forKey: "desc") as! String
                     let done = result.value(forKey: "isDone") as! Bool
 
-                   // tasks.append(Tasks(title: title, desc: desc, date: date, noOfDays: Int(days), isDone: done))
+                  
                     
                 }
             
@@ -88,10 +170,14 @@ class TaskTVC: UITableViewController {
     }
     
     override func viewDidAppear(_ animated: Bool) {
+        //loadCoreData()
+        //tableView.reloadData()
+    }
+   
+    func reloadData(){
         loadCoreData()
         tableView.reloadData()
     }
-   
 
     
     // Override to support conditional editing of the table view.
@@ -99,20 +185,85 @@ class TaskTVC: UITableViewController {
         // Return false if you do not want the specified item to be editable.
         return true
     }
-    
+    override func tableView(_ tableView: UITableView,
+      editActionsForRowAt indexPath: IndexPath)
+      -> [UITableViewRowAction]? {
+      
+        let managedContext = appDelegate.persistentContainer.viewContext
+         var currentResult = self.results![indexPath.row]
+        let deleteTitle = NSLocalizedString("Delete", comment: "Delete action")
+        let deleteAction = UITableViewRowAction(style: .destructive,
+        title: deleteTitle) { (action, indexPath) in
+        
+            managedContext.delete(currentResult)
+            self.results?.remove(at: indexPath.row)
+                   do{
+                       try managedContext.save()
+                   }catch
+                   {
+                       print(error)
+                   }
+                   self.tableView.deleteRows(at: [indexPath], with: .fade)
+                   tableView.reloadData()
+      }
+
+      let addNumber = NSLocalizedString("Decrease Day", comment: "desc action")
+      let increaseNum = UITableViewRowAction(style: .normal,
+        title: addNumber) { (action, indexPath) in
+       
+                  
+            let days = currentResult.value(forKey: "noOfDays") as! Int - 1
+          // print(days)
+            currentResult.setValue(days, forKey: "noOfDays")
+                         do{
+                             try managedContext.save()
+                         }catch
+                         {
+                             print(error)
+                         }
+
+                         tableView.reloadData()
+      }
+      increaseNum.backgroundColor = .black
+        
+        if currentResult.value(forKey: "isDone") as! Bool{
+            return [deleteAction]
+        }
+        else{
+      
+           return [increaseNum, deleteAction]
+        }
+    }
+
 
     
     // Override to support editing the table view.
-    override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
-        if editingStyle == .delete {
-            // Delete the row from the data source
-            results?.remove(at: indexPath.row)
-            
-            tableView.deleteRows(at: [indexPath], with: .fade)
-        } else if editingStyle == .insert {
-            // Create a new instance of the appropriate class, insert it into the array, and add a new row to the table view
-        }    
-    }
+   // override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
+//        // create an instance of app delegate
+//              let appDelegate = UIApplication.shared.delegate as! AppDelegate
+//              // second step is context
+//              let managedContext = appDelegate.persistentContainer.viewContext
+//        var toDelete = results![indexPath.row]
+//
+//        if editingStyle == .delete {
+//            // Delete the row from the data source
+//            managedContext.delete(toDelete)
+//            results?.remove(at: indexPath.row)
+//            do{
+//                try managedContext.save()
+//            }catch
+//            {
+//                print(error)
+//            }
+//            self.tableView.deleteRows(at: [indexPath], with: .fade)
+//            tableView.reloadData()
+//
+//
+//        }
+      
+        
+  //  }
+    
     
 
  
